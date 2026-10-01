@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import type { AvailabilityGrid } from "@/lib/availability";
+import type { AvailabilityGrid, FreeWindow } from "@/lib/availability";
 import { findWindows, slotStartMinutes } from "@/lib/availability";
 import type { BusyBlock, Member } from "@/lib/types";
 import { DAY_INITIAL, DAY_NAMES, DAY_SHORT, SLOT_MINUTES, formatAxisHour, formatTime } from "@/lib/time";
@@ -12,9 +12,16 @@ interface AvailabilityGridProps {
   grid: AvailabilityGrid;
   members: Member[];
   blocks: BusyBlock[];
+  /** Outlined on the week, so the headline window can be found in context. */
+  highlight?: FreeWindow;
 }
 
-export function AvailabilityGrid({ grid, members, blocks }: AvailabilityGridProps) {
+export function AvailabilityGrid({
+  grid,
+  members,
+  blocks,
+  highlight,
+}: AvailabilityGridProps) {
   const [focus, setFocus] = React.useState<{ dayPosition: number; slot: number } | null>(null);
   const total = grid.memberIds.length;
   const nameOf = React.useMemo(
@@ -122,7 +129,17 @@ export function AvailabilityGrid({ grid, members, blocks }: AvailabilityGridProp
                   {DAY_SHORT[day]}
                 </span>
               </div>
-              <div className="overflow-hidden rounded-[5px]">
+              <div className="relative overflow-hidden rounded-[5px]">
+                {highlight?.day === day && (
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute inset-x-0 z-10 rounded-[4px] ring-2 ring-inset ring-gold"
+                    style={{
+                      top: `calc(var(--slot-h) * ${(highlight.start - grid.dayStart) / SLOT_MINUTES})`,
+                      height: `calc(var(--slot-h) * ${(highlight.end - highlight.start) / SLOT_MINUTES})`,
+                    }}
+                  />
+                )}
                 {Array.from({ length: grid.slotCount }, (_, slot) => {
                   const busy = grid.busyBy[dayPosition][slot];
                   const free = total - busy.length;
@@ -174,6 +191,11 @@ export function AvailabilityGrid({ grid, members, blocks }: AvailabilityGridProp
               </>
             )}
           </span>
+        ) : highlight ? (
+          <span>
+            <span className="font-medium text-gold">Outlined:</span> the best time this week.
+            Tap or hover any block to see who is in class then.
+          </span>
         ) : (
           <span>Tap or hover any block to see who is in class then.</span>
         )}
@@ -186,7 +208,7 @@ function Legend() {
   // A fixed four-person sample, so the ramp reads the same whether the filter
   // holds one person or nine.
   const sample = 4;
-  const steps = [0, 1, 2, 4];
+  const steps = [0, 1, 2, 3, 4];
   return (
     <div className="flex items-center gap-2">
       <span className="eyebrow">None free</span>

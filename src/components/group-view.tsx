@@ -274,7 +274,12 @@ export function GroupView({ initialGroup }: { initialGroup: Group }) {
               awaitingImports={awaitingImports}
             />
 
-            <AvailabilityGrid grid={grid} members={group.members} blocks={group.blocks} />
+            <AvailabilityGrid
+              grid={grid}
+              members={group.members}
+              blocks={group.blocks}
+              highlight={windows[0]}
+            />
           </>
         )}
 

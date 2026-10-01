@@ -3,7 +3,7 @@
 import { CalendarX2, Clock } from "lucide-react";
 import type { FreeWindow } from "@/lib/availability";
 import type { Member } from "@/lib/types";
-import { DAY_SHORT, formatDuration, formatTime } from "@/lib/time";
+import { DAY_NAMES, DAY_SHORT, formatDuration, formatTime } from "@/lib/time";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
@@ -16,7 +16,7 @@ interface SharedWindowsProps {
   awaitingImports: number;
 }
 
-const VISIBLE = 8;
+const VISIBLE = 7;
 
 export function SharedWindows({
   windows,
@@ -28,7 +28,12 @@ export function SharedWindows({
 }: SharedWindowsProps) {
   const nameOf = new Map(members.map((member) => [member.id, member.name]));
   const longest = windows.reduce((best, window) => Math.max(best, window.end - window.start), 0);
-  const shown = windows.slice(0, VISIBLE);
+  // Windows arrive ranked, so the first one is the answer and gets to be read
+  // without working down a list.
+  const [best, ...rest] = windows;
+  const shown = rest.slice(0, VISIBLE);
+  const missing = (window: FreeWindow) =>
+    window.busyIds.map((id) => nameOf.get(id) ?? "someone").join(", ");
 
   return (
     <section className="flex flex-col gap-2.5">
@@ -67,6 +72,25 @@ export function SharedWindows({
               Nothing works for all {selectedCount}. These are the windows one person short.
             </p>
           )}
+
+          <div className="rounded-xl border border-primary/25 bg-primary/[0.055] p-4 sm:p-5">
+            <p className="eyebrow text-primary">Best time this week</p>
+            <p className="mt-1.5 text-xl font-semibold tracking-[-0.025em] tnum sm:text-[1.625rem]">
+              {DAY_NAMES[best.day]} {formatTime(best.start)}
+              <span className="text-muted-foreground"> &ndash; </span>
+              {formatTime(best.end)}
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              <span className="tnum">{formatDuration(best.end - best.start)}</span>
+              {" · "}
+              {best.busyIds.length
+                ? `everyone except ${missing(best)}`
+                : `all ${selectedCount} free`}
+            </p>
+          </div>
+
+          {shown.length > 0 && <h3 className="eyebrow pt-1">Also open</h3>}
+          {shown.length > 0 && (
           <ul className="divide-y overflow-hidden rounded-xl border bg-card">
             {shown.map((window) => (
               <li
@@ -85,7 +109,7 @@ export function SharedWindows({
                   </p>
                   {window.busyIds.length > 0 && (
                     <p className="truncate text-xs text-muted-foreground">
-                      without {window.busyIds.map((id) => nameOf.get(id) ?? "someone").join(", ")}
+                      without {missing(window)}
                     </p>
                   )}
                 </div>
@@ -99,10 +123,12 @@ export function SharedWindows({
               </li>
             ))}
           </ul>
-          {windows.length > VISIBLE && (
+          )}
+          {rest.length > VISIBLE && (
             <p className="text-xs text-muted-foreground">
-              {windows.length - VISIBLE} shorter {windows.length - VISIBLE === 1 ? "window" : "windows"} not
-              listed. The grid below shows all of them.
+              {rest.length - VISIBLE} shorter{" "}
+              {rest.length - VISIBLE === 1 ? "window" : "windows"} not listed. The grid below
+              shows all of them.
             </p>
           )}
         </>

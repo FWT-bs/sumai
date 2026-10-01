@@ -74,11 +74,13 @@ export function MemberFilter({ members, selectedIds, onChange, meId }: MemberFil
               onClick={() => toggle(member.id)}
               className={cn(
                 "group flex shrink-0 items-center gap-2 rounded-full border py-1.5 pr-3 pl-2.5 text-sm font-medium transition-colors",
+                // The name carries identity; the dot carries the colour. Text
+                // stays in ink so it is legible whatever hue the person got.
                 on
-                  ? "border-transparent bg-card shadow-xs"
+                  ? "bg-card text-foreground shadow-xs"
                   : "border-dashed bg-transparent text-muted-foreground",
               )}
-              style={on ? { borderColor: color, color } : undefined}
+              style={on ? { borderColor: color } : undefined}
             >
               <span
                 aria-hidden

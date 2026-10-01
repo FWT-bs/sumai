@@ -46,14 +46,14 @@
   --heat-empty: #e8e4f1;
   --heat-gridline: #e3e0ec;
 
-  --member-0: #4b2e83;
-  --member-1: #10697a;
-  --member-2: #a8481a;
-  --member-3: #256239;
-  --member-4: #8c2f5a;
-  --member-5: #24519b;
-  --member-6: #7a6a22;
-  --member-7: #5c4794;
+  --member-0: #2a78d6;
+  --member-1: #eb6834;
+  --member-2: #1baf7a;
+  --member-3: #eda100;
+  --member-4: #e87ba4;
+  --member-5: #008300;
+  --member-6: #4a3aa7;
+  --member-7: #e34948;
 
   --radius: 0.625rem;
 }
@@ -86,14 +86,14 @@
     --heat-empty: #272235;
     --heat-gridline: #2d2842;
 
-    --member-0: #a98bec;
-    --member-1: #57c2d4;
-    --member-2: #f09f68;
-    --member-3: #6ec489;
-    --member-4: #e88ab4;
-    --member-5: #7fadf5;
-    --member-6: #d8c48c;
-    --member-7: #c2a9f2;
+    --member-0: #3987e5;
+    --member-1: #d95926;
+    --member-2: #199e70;
+    --member-3: #c98500;
+    --member-4: #d55181;
+    --member-5: #008300;
+    --member-6: #9085e9;
+    --member-7: #e66767;
   }
 }
 
@@ -124,14 +124,14 @@
   --heat-empty: #272235;
   --heat-gridline: #2d2842;
 
-  --member-0: #a98bec;
-  --member-1: #57c2d4;
-  --member-2: #f09f68;
-  --member-3: #6ec489;
-  --member-4: #e88ab4;
-  --member-5: #7fadf5;
-  --member-6: #d8c48c;
-  --member-7: #c2a9f2;
+  --member-0: #3987e5;
+  --member-1: #d95926;
+  --member-2: #199e70;
+  --member-3: #c98500;
+  --member-4: #d55181;
+  --member-5: #008300;
+  --member-6: #9085e9;
+  --member-7: #e66767;
 }
 
 @theme inline {
