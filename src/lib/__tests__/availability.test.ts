@@ -166,6 +166,80 @@ describe("parseIcsSchedule", () => {
     expect(meetings[0].label).toContain("title that folds");
   });
 
+  it("expands an export that lists every meeting instead of a recurrence", () => {
+    // Plenty of university exports emit one VEVENT per class date for the
+    // whole quarter rather than an RRULE.
+    const dates = ["20260105", "20260107", "20260109", "20260112", "20260114"];
+    const ics = [
+      "BEGIN:VCALENDAR",
+      ...dates.flatMap((date) => [
+        "BEGIN:VEVENT",
+        "SUMMARY:CSE 142 A Lecture",
+        "LOCATION:KNE 130",
+        `DTSTART;TZID=America/Los_Angeles:${date}T093000`,
+        `DTEND;TZID=America/Los_Angeles:${date}T102000`,
+        "END:VEVENT",
+      ]),
+      "END:VCALENDAR",
+    ].join("\r\n");
+    const { meetings } = parseIcsSchedule(ics);
+    expect(meetings).toHaveLength(3);
+    expect(meetings.map((m) => m.day)).toEqual([0, 2, 4]);
+    expect(meetings[0]).toMatchObject({ start: 570, end: 620 });
+  });
+
+  it("reads UTC timestamps on UW's clock, not the importer's", () => {
+    // 17:30Z in January is 9:30 in Seattle. The answer must not depend on
+    // where the person importing happens to be.
+    const ics = [
+      "BEGIN:VEVENT",
+      "SUMMARY:CHEM 142 B",
+      "DTSTART:20260106T173000Z",
+      "DTEND:20260106T185000Z",
+      "RRULE:FREQ=WEEKLY;BYDAY=TU,TH",
+      "END:VEVENT",
+    ].join("\r\n");
+    const { meetings } = parseIcsSchedule(ics);
+    expect(meetings.map((m) => m.day)).toEqual([1, 3]);
+    expect(meetings[0]).toMatchObject({ start: 570, end: 650 });
+  });
+
+  it("keeps UTC correct across daylight saving", () => {
+    // 16:30Z in July is also 9:30 in Seattle, an hour's offset later.
+    const { meetings } = parseIcsSchedule(
+      ["BEGIN:VEVENT", "SUMMARY:Summer", "DTSTART:20260707T163000Z", "DTEND:20260707T175000Z", "END:VEVENT"].join(
+        "\r\n",
+      ),
+    );
+    expect(meetings[0]).toMatchObject({ day: 1, start: 570, end: 650 });
+  });
+
+  it("converts an event carrying another zone into UW time", () => {
+    const { meetings } = parseIcsSchedule(
+      [
+        "BEGIN:VEVENT",
+        "SUMMARY:Transferred",
+        "DTSTART;TZID=America/New_York:20260106T123000",
+        "DTEND;TZID=America/New_York:20260106T135000",
+        "END:VEVENT",
+      ].join("\r\n"),
+    );
+    expect(meetings[0]).toMatchObject({ day: 1, start: 570, end: 650 });
+  });
+
+  it("falls back to wall time when the zone is unrecognised", () => {
+    const { meetings } = parseIcsSchedule(
+      [
+        "BEGIN:VEVENT",
+        "SUMMARY:Odd zone",
+        'DTSTART;TZID="Not/AZone":20260105T093000',
+        'DTEND;TZID="Not/AZone":20260105T102000',
+        "END:VEVENT",
+      ].join("\r\n"),
+    );
+    expect(meetings[0]).toMatchObject({ day: 0, start: 570, end: 620 });
+  });
+
   it("flags all-day events rather than blocking the whole week", () => {
     const ics = ["BEGIN:VEVENT", "SUMMARY:Holiday", "DTSTART;VALUE=DATE:20260119", "END:VEVENT"].join(
       "\r\n",

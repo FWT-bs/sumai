@@ -98,6 +98,7 @@ function Editor({
   const [notice, setNotice] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
+  const [dragging, setDragging] = React.useState(false);
 
   // Manual entry
   const [manualLabel, setManualLabel] = React.useState("");
@@ -211,7 +212,7 @@ function Editor({
               </TabsTrigger>
               <TabsTrigger value="file">
                 <Calendar aria-hidden />
-                File
+                .ics file
               </TabsTrigger>
               <TabsTrigger value="manual">
                 <Pencil aria-hidden />
@@ -237,19 +238,46 @@ function Editor({
                   Use a sample schedule
                 </Button>
               </div>
+              <p className="text-xs text-muted-foreground">
+                Got a calendar export instead? Use the .ics file tab.
+              </p>
             </TabsContent>
 
             <TabsContent value="file" className="flex flex-col gap-2.5">
-              <Label htmlFor="schedule-file">Calendar export (.ics)</Label>
-              <Input
-                id="schedule-file"
-                type="file"
-                accept=".ics,text/calendar"
-                onChange={(event) => void handleFile(event.target.files?.[0])}
-                className="h-auto py-2 file:mr-3 file:rounded file:border-0 file:bg-secondary file:px-2.5 file:py-1 file:text-sm file:font-medium"
-              />
+              <Label htmlFor="schedule-file">
+                The .ics file UW exports from MyUW or MyPlan
+              </Label>
+              <div
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  setDragging(true);
+                }}
+                onDragLeave={() => setDragging(false)}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setDragging(false);
+                  void handleFile(event.dataTransfer.files?.[0]);
+                }}
+                className={cn(
+                  "rounded-lg border border-dashed p-3 transition-colors",
+                  dragging ? "border-primary bg-primary/5" : "bg-card",
+                )}
+              >
+                <Input
+                  id="schedule-file"
+                  type="file"
+                  accept=".ics,text/calendar"
+                  onChange={(event) => void handleFile(event.target.files?.[0])}
+                  className="h-auto border-0 bg-transparent py-1 shadow-none file:mr-3 file:rounded file:border-0 file:bg-secondary file:px-2.5 file:py-1 file:text-sm file:font-medium focus-visible:ring-0"
+                />
+                <p className="mt-1 px-1 text-xs text-muted-foreground">
+                  Or drop the file here.
+                </p>
+              </div>
               <p className="text-xs text-muted-foreground">
-                Weekly repeating events become weekly busy blocks. All-day events are left out.
+                Times are read on UW&rsquo;s Pacific clock, so the week comes out the same
+                wherever you import it. Repeating classes become weekly blocks; all-day
+                events are left out.
               </p>
             </TabsContent>
 

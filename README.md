@@ -79,13 +79,23 @@ Specifically it reads:
 Classes with no meeting time (`TBA`) are reported rather than dropped silently,
 so you know to add them by hand if they do meet.
 
-### Calendar file
+### Calendar file (.ics)
 
-An `.ics` export. A weekly recurring event becomes a weekly busy block using
-its `BYDAY` list; a one-off event uses its own weekday. All-day events are
-skipped, since blocking an entire day is almost never what the export meant.
-Times are read as wall-clock time, so an export whose times are in UTC is
-converted using the browser's own zone.
+The export UW produces from MyUW or MyPlan. Choose the file or drop it on the
+`.ics file` tab.
+
+Both shapes of export work. A weekly recurring event becomes a weekly busy
+block from its `BYDAY` list, and an export that instead lists every single
+class date for the quarter collapses back down to one block per weekday. All-day
+events are reported rather than imported, since blocking out a whole day is
+almost never what the export meant.
+
+Times are read on UW's own Pacific clock rather than the importer's. A file
+carrying UTC timestamps, or one exported from a calendar set to another zone,
+is converted across — including over daylight saving — so the same file gives
+the same week whether it is opened in Seattle or on a laptop still set to
+Eastern, and so everyone in a group sees the same hours. An unrecognised
+timezone falls back to reading the times as written rather than failing.
 
 ### By hand
 

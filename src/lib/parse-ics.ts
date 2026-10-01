@@ -36,8 +36,81 @@ interface IcsDateTime {
   dateOnly: boolean;
 }
 
+/**
+ * UW classes are scheduled in Pacific time, so that is the clock the week is
+ * read on. Anchoring here rather than to the importer's own timezone means the
+ * same file gives the same week whether it is opened in Seattle or on a laptop
+ * still set to Eastern, and means everyone in a group sees the same hours.
+ */
+const UW_TIME_ZONE = "America/Los_Angeles";
+
+const WEEKDAY_INDEX: Record<string, DayIndex> = {
+  Mon: 0,
+  Tue: 1,
+  Wed: 2,
+  Thu: 3,
+  Fri: 4,
+  Sat: 5,
+  Sun: 6,
+};
+
+function zoneParts(zone: string, instant: Date) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: zone,
+    hourCycle: "h23",
+    weekday: "short",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(instant);
+  return Object.fromEntries(parts.map((part) => [part.type, part.value])) as Record<
+    string,
+    string
+  >;
+}
+
+/** How far `zone` runs ahead of UTC at a given instant, in minutes. */
+function zoneOffset(zone: string, instant: Date): number {
+  const p = zoneParts(zone, instant);
+  const asIfUtc = Date.UTC(
+    Number(p.year),
+    Number(p.month) - 1,
+    Number(p.day),
+    Number(p.hour),
+    Number(p.minute),
+    Number(p.second),
+  );
+  return (asIfUtc - instant.getTime()) / 60000;
+}
+
+/** The instant at which `zone`'s wall clock reads the given date and time. */
+function instantFromWallTime(
+  zone: string,
+  y: number,
+  mo: number,
+  d: number,
+  h: number,
+  mi: number,
+): Date {
+  const naive = Date.UTC(y, mo - 1, d, h, mi);
+  // The offset depends on the instant, which depends on the offset; one
+  // correction pass settles it either side of a daylight-saving change.
+  const first = naive - zoneOffset(zone, new Date(naive)) * 60000;
+  return new Date(naive - zoneOffset(zone, new Date(first)) * 60000);
+}
+
+function uwWallTime(instant: Date): { day: DayIndex; minutes: number } {
+  const p = zoneParts(UW_TIME_ZONE, instant);
+  return {
+    day: WEEKDAY_INDEX[p.weekday] ?? 0,
+    minutes: Number(p.hour) * 60 + Number(p.minute),
+  };
+}
+
 function parseIcsDateTime(property: string, value: string): IcsDateTime | null {
-  const utc = value.endsWith("Z");
   const hit = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})?)?Z?$/.exec(value.trim());
   if (!hit) return null;
 
@@ -47,25 +120,42 @@ function parseIcsDateTime(property: string, value: string): IcsDateTime | null {
     return { day: toMondayFirst(at.getUTCDay()), minutes: 0, dateOnly: true };
   }
 
-  // A UTC value has to be moved into the reader's zone before its weekday and
-  // clock time mean anything. A floating or TZID value is already wall time.
-  if (utc && !/TZID=/i.test(property)) {
-    const at = new Date(
-      Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(hh), Number(mm), 0),
-    );
+  const tzid = /TZID=\"?([^\";:]+)/i.exec(property)?.[1];
+  const isUtc = value.trim().endsWith("Z");
+
+  // A value already on UW's clock, or one with no zone at all, is wall time.
+  if (!isUtc && (!tzid || tzid === UW_TIME_ZONE)) {
+    const at = new Date(Date.UTC(Number(y), Number(mo) - 1, Number(d)));
     return {
-      day: toMondayFirst(at.getDay()),
-      minutes: at.getHours() * 60 + at.getMinutes(),
+      day: toMondayFirst(at.getUTCDay()),
+      minutes: Number(hh) * 60 + Number(mm),
       dateOnly: false,
     };
   }
 
-  const at = new Date(Date.UTC(Number(y), Number(mo) - 1, Number(d)));
-  return {
-    day: toMondayFirst(at.getUTCDay()),
-    minutes: Number(hh) * 60 + Number(mm),
-    dateOnly: false,
-  };
+  try {
+    const instant = isUtc
+      ? new Date(
+          Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(hh), Number(mm)),
+        )
+      : instantFromWallTime(
+          tzid as string,
+          Number(y),
+          Number(mo),
+          Number(d),
+          Number(hh),
+          Number(mm),
+        );
+    return { ...uwWallTime(instant), dateOnly: false };
+  } catch {
+    // An unknown TZID makes Intl throw; fall back to reading it as wall time.
+    const at = new Date(Date.UTC(Number(y), Number(mo) - 1, Number(d)));
+    return {
+      day: toMondayFirst(at.getUTCDay()),
+      minutes: Number(hh) * 60 + Number(mm),
+      dateOnly: false,
+    };
+  }
 }
 
 function toMondayFirst(jsDay: number): DayIndex {
