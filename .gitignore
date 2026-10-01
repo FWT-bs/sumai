@@ -11,10 +11,8 @@ next-env.d.ts
 .env*.local
 
 data/
-*.sqlite
-*.sqlite-journal
-*.sqlite-wal
-*.sqlite-shm
+*.json.tmp
+*.corrupt-*
 
 .DS_Store
 *.log

@@ -1,48 +1,53 @@
-import Database from "better-sqlite3";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import type { DayIndex } from "./types";
 
-const SCHEMA = `
-PRAGMA journal_mode = WAL;
-PRAGMA foreign_keys = ON;
+/**
+ * Persistence is a single JSON file, written atomically.
+ *
+ * A group is a handful of people and a few hundred busy blocks, so the whole
+ * store is a few kilobytes and fits in memory. Keeping it to the Node standard
+ * library means no native module to compile, which means no build toolchain to
+ * install before the app will run.
+ */
 
-CREATE TABLE IF NOT EXISTS groups (
-  code       TEXT PRIMARY KEY,
-  name       TEXT NOT NULL,
-  created_at TEXT NOT NULL
-);
+export interface BlockRecord {
+  id: string;
+  label: string;
+  location: string | null;
+  day: DayIndex;
+  start: number;
+  end: number;
+}
 
-CREATE TABLE IF NOT EXISTS members (
-  id          TEXT PRIMARY KEY,
-  group_code  TEXT NOT NULL REFERENCES groups(code) ON DELETE CASCADE,
-  name        TEXT NOT NULL,
-  color_index INTEGER NOT NULL,
-  joined_at   TEXT NOT NULL,
-  imported_at TEXT
-);
+export interface MemberRecord {
+  id: string;
+  name: string;
+  colorIndex: number;
+  joinedAt: string;
+  /** Null until this person saves a week, which is how a group tells
+   *  "no classes" apart from "has not got round to it". */
+  importedAt: string | null;
+  blocks: BlockRecord[];
+}
 
-CREATE INDEX IF NOT EXISTS members_by_group ON members (group_code);
+export interface GroupRecord {
+  code: string;
+  name: string;
+  createdAt: string;
+  members: MemberRecord[];
+}
 
-CREATE TABLE IF NOT EXISTS busy_blocks (
-  id        TEXT PRIMARY KEY,
-  member_id TEXT NOT NULL REFERENCES members(id) ON DELETE CASCADE,
-  label     TEXT NOT NULL,
-  location  TEXT,
-  day       INTEGER NOT NULL,
-  start_min INTEGER NOT NULL,
-  end_min   INTEGER NOT NULL
-);
+export interface Store {
+  version: 1;
+  groups: GroupRecord[];
+}
 
-CREATE INDEX IF NOT EXISTS blocks_by_member ON busy_blocks (member_id);
-`;
+function emptyStore(): Store {
+  return { version: 1, groups: [] };
+}
 
-type Db = Database.Database;
-
-// Next reloads route modules on every edit in development, so the handle is
-// cached on the global to avoid piling up connections to the same file.
-const globalForDb = globalThis as unknown as { sumaiDb?: Db };
-
-function open(): Db {
+function dataFile(): string {
   const configured = process.env.SUMAI_DATA_DIR;
   // The bundler cannot trace a path that comes from the environment, and does
   // not need to: this file is only ever read at runtime on the server.
@@ -50,12 +55,73 @@ function open(): Db {
     ? path.resolve(/* turbopackIgnore: true */ configured)
     : path.join(process.cwd(), "data");
   mkdirSync(dir, { recursive: true });
-  const db = new Database(path.join(dir, "sumai.sqlite"));
-  db.exec(SCHEMA);
-  return db;
+  return path.join(dir, "sumai.json");
 }
 
-export function getDb(): Db {
-  if (!globalForDb.sumaiDb) globalForDb.sumaiDb = open();
-  return globalForDb.sumaiDb;
+function isStore(value: unknown): value is Store {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    Array.isArray((value as Store).groups)
+  );
+}
+
+function load(file: string): Store {
+  let raw: string;
+  try {
+    raw = readFileSync(file, "utf8");
+  } catch {
+    return emptyStore();
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!isStore(parsed)) throw new Error("unrecognised shape");
+    return parsed;
+  } catch (error) {
+    // Never quietly discard someone's groups: keep the unreadable file so it
+    // can be inspected, and carry on with an empty store.
+    const backup = `${file}.corrupt-${Date.now()}`;
+    try {
+      renameSync(file, backup);
+      console.error(`[sumai] ${file} was unreadable; moved it to ${backup}`, error);
+    } catch {
+      console.error(`[sumai] ${file} was unreadable and could not be set aside`, error);
+    }
+    return emptyStore();
+  }
+}
+
+// Next reloads route modules on every edit in development, so the loaded store
+// is cached on the global rather than re-read on each request.
+const globalForStore = globalThis as unknown as {
+  sumaiStore?: Store;
+  sumaiFile?: string;
+};
+
+function handle(): { store: Store; file: string } {
+  if (!globalForStore.sumaiFile) globalForStore.sumaiFile = dataFile();
+  const file = globalForStore.sumaiFile;
+  if (!globalForStore.sumaiStore) globalForStore.sumaiStore = load(file);
+  return { store: globalForStore.sumaiStore, file };
+}
+
+/** Reads the store. Callers must not mutate what they get back. */
+export function read(): Store {
+  return handle().store;
+}
+
+/**
+ * Applies a change and writes it out before returning, so a response is never
+ * sent for something that is not yet on disk. Writing to a temporary file and
+ * renaming it means a crash mid-write leaves the previous file intact.
+ */
+export function write<T>(change: (store: Store) => T): T {
+  const { store, file } = handle();
+  const result = change(store);
+
+  const temporary = `${file}.tmp`;
+  writeFileSync(temporary, JSON.stringify(store, null, 2), "utf8");
+  renameSync(temporary, file);
+  return result;
 }

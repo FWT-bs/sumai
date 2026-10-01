@@ -13,8 +13,12 @@ npm install
 npm run dev          # http://localhost:3000
 ```
 
-There is nothing to configure. The database is a SQLite file created on first
-write under `./data` (override with `SUMAI_DATA_DIR`).
+There is nothing to install beyond the npm packages and nothing to configure.
+No dependency compiles native code, so there is no build toolchain to set up
+first. Data goes in a JSON file created on first write under `./data`
+(override with `SUMAI_DATA_DIR`).
+
+Node 20.9 or newer.
 
 ```bash
 npm run build        # production build
@@ -123,8 +127,20 @@ src/
     parse-uw.ts   parse-ics.ts      importers
     availability.ts  heat.ts        overlap and its colour ramp
     time.ts  code.ts  validate.ts   UW time formats, join codes, input limits
-    store.ts  db.ts                 SQLite access
+    store.ts  db.ts                 group storage
 ```
+
+## Storage
+
+A single JSON file, held in memory and written atomically — to a temporary file
+then renamed, so a crash mid-write leaves the previous file intact. If the file
+is ever unreadable it is set aside rather than overwritten, and the app starts
+empty rather than destroying what was there.
+
+A group is a handful of people and a few hundred busy blocks, so the whole
+store is a few kilobytes. That size is why it is a file and not a database:
+keeping to the Node standard library means nothing has to compile when someone
+clones this and runs `npm install`.
 
 ## Design
 
@@ -167,9 +183,10 @@ command above 404s, correct the `registries` entry and it will work.
   impractical, but treat a code the way you would treat a shared calendar link.
 - **Your seat lives in `localStorage`.** Clear site data and you rejoin as a new
   person; the old entry stays until someone removes it.
-- **SQLite means one server with a disk.** It runs anywhere Node does, but a
+- **One server with a disk.** It runs anywhere Node does, but the store assumes
+  a single process: two servers over one file would overwrite each other, and a
   serverless deploy with an ephemeral filesystem will lose groups between
-  invocations. Swap `src/lib/store.ts` for a hosted database to deploy that way;
-  every query lives in that one file.
+  invocations. Point `src/lib/db.ts` at a hosted database to deploy that way —
+  `read` and `write` are the only two functions the rest of the app uses.
 - **Times have no date.** A week is a repeating template, so quarter start and
   end dates, holidays and one-off cancellations are not modelled.
