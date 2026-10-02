@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { StorageError } from "./db";
 import { NotFoundError } from "./store";
 import { ValidationError } from "./validate";
 
@@ -11,8 +12,17 @@ export function jsonError(message: string, status: number) {
 export function handleRouteError(error: unknown) {
   if (error instanceof ValidationError) return jsonError(error.message, 400);
   if (error instanceof NotFoundError) return jsonError(error.message, 404);
+  if (error instanceof StorageError) {
+    // Whoever hits this is running the app themselves, so the cause is
+    // theirs to fix and worth spelling out.
+    console.error(`[sumai] ${error.message}`);
+    return jsonError(error.message, 500);
+  }
   console.error("[sumai] request failed", error);
-  return jsonError("Something went wrong on our end. Try again.", 500);
+  return jsonError(
+    "Something went wrong saving that. The terminal running the app has the details.",
+    500,
+  );
 }
 
 export async function readJson(request: Request): Promise<Record<string, unknown>> {

@@ -43,6 +43,49 @@ export interface Store {
   groups: GroupRecord[];
 }
 
+/**
+ * The app runs on the reader's own machine, so a filesystem problem is
+ * something they can fix — but only if they are told which folder failed and
+ * why. A bare "something went wrong" sends people hunting through a terminal.
+ */
+export class StorageError extends Error {
+  constructor(
+    message: string,
+    readonly directory: string,
+  ) {
+    super(message);
+    this.name = "StorageError";
+  }
+}
+
+function describe(error: unknown, directory: string): StorageError {
+  const code = (error as NodeJS.ErrnoException | null)?.code;
+  const where = `Sumai stores its groups in ${directory}`;
+
+  switch (code) {
+    case "EACCES":
+    case "EPERM":
+      return new StorageError(
+        `${where}, and does not have permission to write there. On macOS, folders like Downloads, Desktop and Documents need to be granted to your terminal in System Settings → Privacy & Security → Files and Folders. Moving the project to your home folder also works, or set SUMAI_DATA_DIR to a folder you can write to.`,
+        directory,
+      );
+    case "ENOSPC":
+      return new StorageError(`${where}, and the disk is full.`, directory);
+    case "EROFS":
+      return new StorageError(`${where}, and that drive is read-only.`, directory);
+    case "ENOTDIR":
+      return new StorageError(
+        `${where}, but part of that path is a file rather than a folder. Remove it, or set SUMAI_DATA_DIR to somewhere else.`,
+        directory,
+      );
+    default:
+      return new StorageError(
+        `${where}, and writing there failed${code ? ` (${code})` : ""}. The terminal running the app has the full error.`,
+        directory,
+      );
+  }
+}
+
 function emptyStore(): Store {
   return { version: 1, groups: [] };
 }
@@ -54,7 +97,11 @@ function dataFile(): string {
   const dir = configured
     ? path.resolve(/* turbopackIgnore: true */ configured)
     : path.join(process.cwd(), "data");
-  mkdirSync(dir, { recursive: true });
+  try {
+    mkdirSync(dir, { recursive: true });
+  } catch (error) {
+    throw describe(error, dir);
+  }
   return path.join(dir, "sumai.json");
 }
 
@@ -121,7 +168,11 @@ export function write<T>(change: (store: Store) => T): T {
   const result = change(store);
 
   const temporary = `${file}.tmp`;
-  writeFileSync(temporary, JSON.stringify(store, null, 2), "utf8");
-  renameSync(temporary, file);
+  try {
+    writeFileSync(temporary, JSON.stringify(store, null, 2), "utf8");
+    renameSync(temporary, file);
+  } catch (error) {
+    throw describe(error, path.dirname(file));
+  }
   return result;
 }
